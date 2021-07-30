@@ -405,9 +405,9 @@ if __name__=="__main__":
         #pprint(hours_rec)
 
         print('')
-        print('Hours Recorded:')
+        print('Hours/Seizures Recorded:')
         fieldnames = ["id"] + [ getShortTopicStr(t) for t in COVERAGE_TOPICS.keys() ] + ["sz_rep", "sz_rec"]
-        writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
+        writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames, lineterminator='\n')
         writer.writeheader()
         for row in hours_rec:
             writer.writerow(row)
