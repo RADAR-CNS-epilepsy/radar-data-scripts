@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 import pytz
 import math, re
 import numpy as np
+import matplotlib
+matplotlib.use('Agg') # Force matplotlib to not use any Xwindows backend.
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from pprint import pprint
@@ -147,8 +149,8 @@ def getFirstLastDay(topics, inpath):
         if not infiles: continue
 
         # get the first and last hour timestamps from the filenames
-        f_first = os.path.basename(infiles[0]).split('.')[0]
-        f_last = os.path.basename(infiles[-1]).split('.')[0]
+        f_first = os.path.basename(infiles[0]).split('.')[0][:13]
+        f_last = os.path.basename(infiles[-1]).split('.')[0][:13]
         dt_first = datetime.strptime(f_first, FILEMASK)
         dt_last = datetime.strptime(f_last, FILEMASK)
         first_days.append(dt_first.replace(hour=0))
