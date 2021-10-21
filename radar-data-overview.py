@@ -159,7 +159,12 @@ def getFirstLastDay(topics, inpath):
     # return the outer bounds of first and last day over all topics
     return (min(first_days, default=None), max(last_days, default=None))
 
-
+# https://stackoverflow.com/a/9631635
+def blocks(files, size=65536):
+    while True:
+        b = files.read(size)
+        if not b: break
+        yield b
 def getTopicCoverage(inpath, expected_lines, dt_first_day, dt_last_day, lookback_days):
     # init, return if no files found
     topic_coverage_all = [np.nan]
@@ -177,14 +182,20 @@ def getTopicCoverage(inpath, expected_lines, dt_first_day, dt_last_day, lookback
     topic_coverage_lookback = {datetime.strftime(h, FILEMASK):0 for h in expected_hours_lookback}
 
     # iterate data files per topic, fill timeline with data coverage from available files
-    for f in infiles:
-        fsplit = os.path.basename(f).split('.')
+    for fname in infiles:
+        fsplit = os.path.basename(fname).split('.')
         num_lines = 0
 
         # read lines, skip if not in timeline
         if fsplit[0] not in topic_coverage_all.keys() and fsplit[0] not in topic_coverage_lookback.keys(): continue
-        if fsplit[-1] == "gz": num_lines = sum(1 for line in gzip.open(f))
-        elif fsplit[-1] == "csv": num_lines = sum(1 for line in open(f))
+        if fsplit[-1] == "gz":
+            # num_lines = sum(1 for line in gzip.open(fname))
+            with gzip.open(fname, "rt", encoding="utf-8", errors='ignore') as f:
+                num_lines = sum(bl.count("\n") for bl in blocks(f))
+        elif fsplit[-1] == "csv":
+            # num_lines = sum(1 for line in open(fname))
+            with open(fname, "rt", encoding="utf-8", errors='ignore') as f:
+                num_lines = sum(bl.count("\n") for bl in blocks(f))
         else: continue
 
         # calculate coverage, fill in timeline, upper bound at 100%
