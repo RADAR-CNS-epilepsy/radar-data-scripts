@@ -151,7 +151,7 @@ def plotCoveragePerday(coverage_data, figtitle, savepath=None):
     fig.suptitle(figtitle, fontsize='x-large')
 
     num_pat = len(coverage_data.keys())
-    num_days = max([len(v) for v in coverage_data.values()])+180
+    num_days = max([len(v) for v in coverage_data.values()])
     cov_mat = np.zeros((num_pat,num_days))
     for key_ix, key in enumerate(sorted(coverage_data.keys())):
         for val_ix, val in enumerate(coverage_data[key]):
@@ -159,7 +159,8 @@ def plotCoveragePerday(coverage_data, figtitle, savepath=None):
 
     im = ax.imshow(cov_mat, vmin=0, vmax=1, aspect='auto', extent=[1,num_days+1,num_pat+1,1])
 
-    xtick_range = np.array(range(0,num_days,30))
+    if num_days > 30: xtick_range = np.array(range(0,num_days+1,30))
+    else: xtick_range = np.array(range(0,num_days+1))
     xtick_range[0] += 1
     ax.set_xticks(xtick_range+0.5)
     ax.set_xticklabels(xtick_range)
