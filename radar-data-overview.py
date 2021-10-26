@@ -336,7 +336,7 @@ if __name__=="__main__":
             map_path = args.patient_map
 
         if args.patient_ids:
-            patients = [ {'RADAR-ID':pid, 'MP-ID':pid, 'status':'active'} for pid in args.patient_ids ]
+            patients = [ {'RADAR-ID':pid, 'MP-ID':pid, 'status':'ongoing'} for pid in args.patient_ids ]
         elif not os.path.isfile(map_path):
             print("No ID mapping file found for [{}], skipping.".format(d))
             continue
@@ -352,7 +352,7 @@ if __name__=="__main__":
         num_samples_all = {} # number of samples recorded
         num_seizures_all = {} # number of seizures reported/recorded
         for p in patients:
-            if args.only_active and p["status"] != "active": continue
+            if args.only_active and p["status"] != "ongoing": continue
             coverage_all[p["MP-ID"]] = {} # initialize empty
             coverage_lookback[p["MP-ID"]] = {} # initialize empty
             num_samples_all[p["MP-ID"]] = {} # initialize empty

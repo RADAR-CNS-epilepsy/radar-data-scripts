@@ -72,7 +72,7 @@ if __name__=="__main__":
 
         coverage = {} # overall coverage store, one array per pat ID filled with mean coverage per topic
         for p in patients:
-            if args.only_active and p["status"] != "active": continue
+            if args.only_active and p["status"] != "ongoing": continue
             coverage[p["RADAR-ID"]] = {} # initialize empty
             for t in CHECK_TOPICS:
                 coverage[p["RADAR-ID"]][t] = [np.nan] # initialize empty
