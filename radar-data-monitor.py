@@ -115,7 +115,7 @@ if __name__=="__main__":
                 coverage[p["RADAR-ID"]][t] = cov_vals
 
             #pprint(coverage[p["RADAR-ID"]])
-            print("[{}] | {} - {} - ({:8s}) --> ACC:{:<4.0%} EDA:{:<4.0%} BVP:{:<4.0%} PHONE:{:<4.0%}".format(
+            print("[{}] | {} - {} - ({:7s}) --> ACC:{:<4.0%} EDA:{:<4.0%} BVP:{:<4.0%} PHONE:{:<4.0%}".format(
                     datetime.now().replace(microsecond=0).isoformat(),
                     p["MP-ID"], p["RADAR-ID"], p["status"],
                     np.mean(coverage[p["RADAR-ID"]]["android_empatica_e4_acceleration"]),

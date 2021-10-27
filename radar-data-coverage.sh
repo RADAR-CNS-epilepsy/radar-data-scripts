@@ -20,24 +20,27 @@ function send_mail() {
     address=$1
     subject=$2
     body=$3
+    sentstr="Email sent: $(date -Iseconds)"
+    sendbody=$(echo -e "${body}\n${sentstr}")
+    attachment=$4
     echo "Sending email notification to $address"
-    echo -e "$body\nEmail sent: $(date -Iseconds)" | sudo-linux docker exec -i ${container} mail -aFrom:$FROM_EMAIL "-s${subject}" $address
+    mime-construct --output --to "$address" --subject "$subject" --encoding quoted-printable --string "${sendbody}" --file-attach ${attachment} | sudo-linux docker exec -i ${container} mail -t
 }
 
-echo "Checking incoming data and creating report."
+echo "Processing extracted data and plotting coverage."
 
 startdt="$(date -Iseconds)"
-report=$(sudo-linux python3 /home/ubuntu/radar-docker/lib/radar-data-coverage.py /mnt/hdfs-extract/UKLFR-Epi2 /mnt/hdfs-extract/KCL-Epi2)
-echo -e "$report" | grep -e "-->" >> "/home/ubuntu/radar-docker/logs/radar-data-monitor/radar-data-coverage-$(date +%Gw%V).log"
+pdfout="/home/ubuntu/radar-docker/coverage-plots/simple-coverage-plots-$(date -I).pdf"
+report=$(sudo-linux python3 /home/ubuntu/radar-docker/lib/radar-data-coverage.py /mnt/hdfs-extract/UKLFR-Epi2 /mnt/hdfs-extract/KCL-Epi2 -po /home/ubuntu/radar-docker/coverage-plots)
+echo -e "$report" >> "/home/ubuntu/radar-docker/logs/radar-data-monitor/radar-data-coverage-$(date +%Gw%V).log"
+img2pdf /home/ubuntu/radar-docker/coverage-plots/*dailyDataCoverage.png -o "$pdfout"
 enddt="$(date -Iseconds)"
 
-subject="[RADAR-EPI-2] data coverage report for ${SERVER_NAME} ($(date -I))"
-body="Data coverage report log for $(date):\n\n${report}\n\n\n----------\nScript start: ${startdt}"
+subject="[RADAR-EPI-2] overall data coverage for ${SERVER_NAME} ($(date -I))"
+body="Overall data coverage for $(date), see attachment.\n\n\n----------\nScript log:\n${report}\n\n----------\nScript start: ${startdt}"
+attachment=${pdfout}
 
-#echo "$subject"
-#echo "$body"
-
-send_mail "mail@example.com" "$subject" "$body"
+send_mail "mail@example.com" "$subject" "$body" "$attachment"
 
 exit 0
 

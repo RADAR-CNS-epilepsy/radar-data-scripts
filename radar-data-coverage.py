@@ -3,7 +3,8 @@
 import sys, os, glob, copy
 import argparse, fileinput
 import csv, gzip, json
-from datetime import datetime, timedelta
+import collections
+from datetime import datetime, date, time, timedelta
 import pytz
 import math, re
 import numpy as np
@@ -145,44 +146,67 @@ def getTopicCoverage(inpath, expected_lines, dt_first_day, dt_last_day):
 
 
 
-def plotCoveragePerday(coverage_data, figtitle, savepath=None):
+def getColorFromIDStatus(id, status):
+    if not status: return 'k'
+    if status[id] == "ongoing": return 'k'
+    elif status[id] == "done": return 'g'
+    elif status[id] == "dropout": return 'r'
+    else: return 'k'
+
+def plotCoveragePerday(coverage_data, figtitle, savepath=None, status=None):
     fig, ax = plt.subplots(figsize=(19,10))
     plt.set_cmap('RdYlGn')
     fig.suptitle(figtitle, fontsize='x-large')
 
-    num_pat = len(coverage_data.keys())
+    pats = sorted(coverage_data.keys())
+
+    num_pat = len(pats)
     num_days = max([len(v) for v in coverage_data.values()])
-    cov_mat = np.zeros((num_pat,num_days))
-    for key_ix, key in enumerate(sorted(coverage_data.keys())):
+    #cov_mat = np.zeros((num_pat,num_days))
+    cov_mat = np.empty((num_pat,num_days))
+    cov_mat.fill(np.nan)
+    for key_ix, key in enumerate(pats):
         for val_ix, val in enumerate(coverage_data[key]):
             cov_mat[key_ix][val_ix] = val
 
     im = ax.imshow(cov_mat, vmin=0, vmax=1, aspect='auto', extent=[1,num_days+1,num_pat+1,1])
 
+    # plot
     if num_days > 30: xtick_range = np.array(range(0,num_days+1,30))
     else: xtick_range = np.array(range(0,num_days+1))
     xtick_range[0] += 1
     ax.set_xticks(xtick_range+0.5)
-    ax.set_xticklabels(xtick_range)
-    ax.set_xlabel("Day of recording")
+    ax.set_xticklabels(xtick_range, fontsize='x-large')
+    ax.set_xlabel("Day of recording", fontsize='x-large')
     ax.set_yticks(np.array(range(num_pat))+1.5)
-    ax.set_yticklabels(sorted(coverage_data.keys()))
+    ax.set_yticklabels(pats, fontsize='x-large')
     ax.set_ylim([num_pat+1,1])
-    ax.set_ylabel("Participant ID")
+    ax.set_ylabel("Participant ID", fontsize='x-large')
 
-    for d in range(2,num_days+1): ax.axvline(d, color='k', lw=1)
+    # grid
+    #for d in range(2,num_days+1): ax.axvline(d, color='k', lw=1)
     for p in range(1,num_pat+2): ax.axhline(p, color='w', lw=5)
     for d in xtick_range[1:]: ax.axvline(d+1, color='k', lw=2)
 
-    cb_ax = fig.add_axes([0.95, 0.2, 0.01, 0.6])
+    # ylabels according to status
+    if status:
+        for label in ax.get_yticklabels():
+            label.set_color(getColorFromIDStatus(label.get_text(), status)) 
+
+    # colorbar
+    plt.subplots_adjust(top=0.94, bottom=0.06, left=0.08, right=0.94)
+    cb_ax = fig.add_axes([0.96, 0.2, 0.01, 0.6])
     cbar = fig.colorbar(im, cax=cb_ax, ticks=[0,0.25,0.5,0.75,1])
+    cb_ax.set_yticklabels(['0%','25%','50%','75%','100%'])
+
+    fig.text(0.01, 0.98, "created: {}".format(datetime.now(pytz.utc).strftime("%F %T %z")))
 
     if savepath:
         if not os.path.isdir(os.path.dirname(savepath)): os.mkdir(os.path.dirname(savepath))
         plt.savefig(savepath)
     else:
         plt.show()
-    
+
     plt.close(fig)
     del fig
     plt.close('all')
@@ -196,6 +220,7 @@ if __name__=="__main__":
     cmdline.add_argument('--patient-ids', type=str, nargs='*', help='List of patient IDs (i.e. folder names), takes precedent over \'--patient-map\'.\n')
     cmdline.add_argument('--patient-map', metavar="PATH", type=str, help='Path to CSV file mapping RADAR-IDs to MP-IDs.\nDefaults to [datadir]/[datadir].csv\n')
     cmdline.add_argument('--only-active', help='Only process subjects marked as active.\n', action="store_true")
+    cmdline.add_argument('--base-study', help='Use the study start/end dates from the csv as base for first/last day. Otherwise, uses info from avalable raw data. Only works if patient map is available.\n', action="store_true")
     cmdline.add_argument('-p', '--plot', help='Plot completeness per day per participant.\n', action="store_true")
     cmdline.add_argument('-o', '--outdir', type=str, default="plots", help="output directory\n")
     cmdline.add_argument('-f', '--outfmt', type=str, default="png", help="output format, i.e. file extension\n")
@@ -220,7 +245,7 @@ if __name__=="__main__":
             map_path = args.patient_map
 
         if args.patient_ids:
-            patients = [ {'RADAR-ID':pid, 'MP-ID':pid, 'status':'active'} for pid in args.patient_ids ]
+            patients = [ {'RADAR-ID':pid, 'MP-ID':pid, 'status':'ongoing'} for pid in args.patient_ids ]
         elif not os.path.isfile(map_path):
             print("No ID mapping file found for [{}], skipping.".format(d))
             continue
@@ -234,7 +259,7 @@ if __name__=="__main__":
         coverage_all = {} # overall coverage store
         num_samples_all = {} # number of samples recorded
         for p in patients:
-            if args.only_active and p["status"] != "active": continue
+            if args.only_active and p["status"] != "ongoing": continue
             coverage_all[p["MP-ID"]] = {} # initialize empty
             num_samples_all[p["MP-ID"]] = {} # initialize empty
 
@@ -245,10 +270,21 @@ if __name__=="__main__":
                 print("Processing {} ({})".format(p["RADAR-ID"], p["MP-ID"]))
 
             # get the first and last day where data is available
-            (dt_first_day, dt_last_day) = getFirstLastDay({**COVERAGE_TOPICS, **QUESTIONNAIRE_TOPICS}, os.path.join(d, p["MP-ID"]))
-            if any(i is None for i in [dt_first_day, dt_last_day]):
+            (dt_first_day_rec, dt_last_day_rec) = getFirstLastDay({**COVERAGE_TOPICS, **QUESTIONNAIRE_TOPICS}, os.path.join(d, p["MP-ID"]))
+            if any(i is None for i in [dt_first_day_rec, dt_last_day_rec]):
                 print("No data available, skipping.")
                 continue
+
+            # get the first and last day participant was in the study
+            dt_first_day_stu = datetime.strptime(p["start"],'%Y-%m-%d').replace(hour=0) if p["start"] else datetime.combine(date.today(),time(0))
+            dt_last_day_stu = datetime.strptime(p["end"],'%Y-%m-%d').replace(hour=23) if p["end"] else datetime.combine(date.today(),time(23))
+
+            if args.base_study:
+                dt_first_day = dt_first_day_stu
+                dt_last_day = dt_last_day_stu
+            else:
+                dt_first_day = dt_first_day_rec
+                dt_last_day = dt_last_day_rec
 
             # calculate coverage value for each topic
             for t in COVERAGE_TOPICS:
@@ -272,31 +308,41 @@ if __name__=="__main__":
         days_rec = []
         for pid in coverage_all.keys():
             days_rec.append({"id":pid})
-            t = 'android_empatica_e4_acceleration'
-
-            days = set([ k[:8] for k in coverage_all[pid][t].keys() ])
-            perday = { d:np.mean([ v for k,v in coverage_all[pid][t].items() if d in k ]) for d in days }
-            dayslt5 = len([ v for v in perday.values() if v <= 0.05 ]) # days < 5%
-            dayslt50 = len([ v for v in perday.values() if v > 0.05 and v <= 0.5 ]) # days < 50%
-            daysgt50 = len([ v for v in perday.values() if v > 0.5 ]) # days > 50%
-            days_rec[-1].update({'dayslt5':dayslt5,'dayslt50':dayslt50,'daysgt50':daysgt50,'perday':perday})
+            for t in COVERAGE_TOPICS:
+                if not isinstance(coverage_all[pid][t], collections.Mapping): continue
+                days = set([ k[:8] for k in coverage_all[pid][t].keys() ])
+                perday = { d:np.mean([ v for k,v in coverage_all[pid][t].items() if d in k ]) for d in days }
+                dayslt5 = len([ v for v in perday.values() if v <= 0.05 ]) # days < 5%
+                dayslt50 = len([ v for v in perday.values() if v > 0.05 and v <= 0.5 ]) # days < 50%
+                daysgt50 = len([ v for v in perday.values() if v > 0.5 ]) # days > 50%
+                days_rec[-1].update({
+                    '{}-dayslt5'.format(getShortTopicStr(t)):dayslt5,
+                    '{}-dayslt50'.format(getShortTopicStr(t)):dayslt50,
+                    '{}-daysgt50'.format(getShortTopicStr(t)):daysgt50,
+                    '{}-perday'.format(getShortTopicStr(t)):perday
+                    })
 
         if args.plot:
-            # repack per day coverage data
-            coverage_perday = { patcomp['id']:[patcomp['perday'][k] for k in sorted(patcomp['perday'].keys())] for patcomp in days_rec }
+            for t in COVERAGE_TOPICS:
+                # repack per day coverage data (dates not relevant for plot)
+                perday_key = '{}-perday'.format(getShortTopicStr(t))
+                coverage_perday = { patcomp['id']:[patcomp[perday_key][k] for k in sorted(patcomp[perday_key].keys())] for patcomp in days_rec  if perday_key in patcomp }
+                if len(coverage_perday) == 0: continue
 
-            # need to map from MP-ID to RADAR-ID here so it will show these in the plot correctly
-            # first assert if RADAR-IDs are also unique, doesn't work otherwise
-            radarIDs = [ pat["RADAR-ID"] for pat in patients ]
-            assert len(radarIDs) == len(set(radarIDs))
-            for oldkey in list(coverage_perday.keys()):
-                newkey = next((item for item in patients if item["MP-ID"] == oldkey), {"RADAR-ID":"N/A"})["RADAR-ID"]
-                coverage_perday[newkey] = coverage_perday.pop(oldkey)
+                # need to map from MP-ID to RADAR-ID here so it will show these in the plot correctly
+                # first assert if RADAR-IDs are also unique, doesn't work otherwise
+                radarIDs = [ pat["RADAR-ID"] for pat in patients ]
+                assert len(radarIDs) == len(set(radarIDs))
+                for oldkey in list(coverage_perday.keys()):
+                    newkey = next((item for item in patients if item["MP-ID"] == oldkey), {"RADAR-ID":"N/A"})["RADAR-ID"]
+                    coverage_perday[newkey] = coverage_perday.pop(oldkey)
 
-            # call plotter
-            figtitle = "Daily data coverage percentage"
-            if args.outdir: savepath = os.path.abspath(os.path.join(args.outdir, "{}_dailyDataCoverage_{}.{}".format(study_id, datetime.now().strftime('%Y%m%d'), args.outfmt)))
-            plotCoveragePerday(coverage_perday, figtitle, savepath if args.outdir else None)
+                patientstatus = { p["RADAR-ID"]:p["status"] for p in patients }
+
+                # call plotter
+                figtitle = "Daily data coverage percentage " + getShortTopicStr(t)
+                if args.outdir: savepath = os.path.abspath(os.path.join(args.outdir, "{}_{}_dailyDataCoverage.{}".format(study_id, getShortTopicStr(t), args.outfmt)))
+                plotCoveragePerday(coverage_perday, figtitle, savepath=(savepath if args.outdir else None), status=patientstatus)
 
         print('')
         print('Hours/Seizures Recorded:')
@@ -308,7 +354,7 @@ if __name__=="__main__":
 
         print('')
         print('Days Recorded:')
-        fieldnames = [ 'id','dayslt5','dayslt50','daysgt50' ]
+        fieldnames = ['id'] + [ '{}-{}'.format(getShortTopicStr(t),s) for t in COVERAGE_TOPICS for s in ['dayslt5','dayslt50','daysgt50'] ]
         writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames, lineterminator='\n', extrasaction='ignore')
         writer.writeheader()
         for row in days_rec:
